@@ -1,0 +1,495 @@
+* Objectives: 
+	+ IaC concepts. 
+	+ Providers. 
+	+ Vars, resource attributes and dependencies. 
+	+ State. 
+	+ Read, generate and modify Configuration. 
+	+ Modules. 
+	+ Cloud. 
+
+
+* IaC tool types:
+	+ Configuration Mgmt: install & manage SW on existing infra. 
+		- Ansible. 
+		- Puppet. 
+	+ Server Templating: create custom image of container of VM. 
+		- Docker. 
+		- Vagrant. 
+	+ Provisioning: a.k.a orchestration of infra components. 
+		- Terraform. 
+		- CFN. 
+
+* Install Terraform: 
+	+ Download binary. 
+	+ Unzip. 
+	+ Move it to /usr/local/bin 
+	+ $ terraform version 
+	// HashiCorp no longer maintains packages in Ubuntu's mainline repos, so "apt install terraform" does not work. 
+
+// Terraform is no longer open-source since Aug 2023. 
+
+
+* HCL: HashiCorp Configuration Language. 
+	+ Declarative. 
+	+ Extension: .tf. 
+	+ Blocks and arguments. 
+
+* Validate VS linting: 
+	+ Related but not the same. 
+	+ Validate: 
+		- Built into Tf. 
+		- Checks syntax and internal consistency of Tf code. 
+		- Ensures references (vars, providers, resorces, etc) are valid. 
+	+ Linting: 
+		- fmt: format code according to Tf style guide. 
+		- tflint (Terraform Linter): 
+			' Popular linter for Tf. 
+			' Detects issues like: unused declarations, invalid provider arguments, deprecated syntax, potential bugs. 
+			' Enforces best practices. 
+		- To get it I did: 
+			' Admin git bash. 
+			' $ choco install tflint 
+		- Use it: $ tflint 
+
+* First example: 
+	# Block (curly braces):
+	# Resource block: 
+	resource 
+		# Resource type:
+		"local_file" 		# local = provider, file = type of resource. 
+			# Resource name (logical): 
+			"pet" {
+		# Arguments as key = value pairs. 
+		...
+	}
+
+* Resource: 
+	+ An object that Tf manages. 
+	+ Fundamental element. 
+
+* Tf workflow: 
+	1.- Write config files. 
+	2.- init: downloads plugins. 
+	3.- plan: all actions Tf will take. 		// + create 
+	4.- apply: after I confirm, will take actions. 	// -auto-approve 
+	5.- show: see details of created resources. 
+
+* Providers: 					// registry.terraform.io 
+	+ Official. 
+	+ Partner. 
+	+ Community. 
+
+* $ terraform providers 				// Displays the providers needed by the configuration. 
+
+* Where will Tf look for variables definitions and what's the precedence? 
+Ans: 
+	1.- Any *.tf files with "variable" definition blocks. Example: variables.tf. 				// Lowest: defaults. 
+	2.- Env vars: export TF_VAR_instance_type="t3.micro" 
+	3.- Auto loaded: terraform.tfvars, terraform.tfvars.json. 
+	4.- 	*.auto.tfvars, *.auto.tfvars.json (alphabetical | lexical filename order). 
+	5.- Custom bulk load via Variable Definition Files (*.tfvars | *.tfvars.json) & -var-file: 
+		ami="..." 
+		instance_type="t3.micro"
+	6.- Command Line arguments: $ terraform apply -var "ami=..." -var "instance_type=t3.micro" 	// Highest: override everything else.  
+
+	
+
+* OUTPUT the public IP of an EC2 instance: 
+Ans: 
+	resource "aws_instance" "public-web-server" {
+		ami = var.web-ami
+		instance_type = var.web-shape
+	}
+	output "public-web-server-ip" {
+		description = "Display the public IP of the web-server EC2 instance after plan or apply. "
+		value = aws_instance.public-web-server.public_ip
+	}
+
+* We can use any name for a variable EXCEPT: 
+Ans: 
+	+ source. 
+	+ version. 
+	+ providers. 
+	+ count. 
+	+ for_each. 
+	+ lifecycle. 
+	+ depends_on. 
+	+ locals. 
+
+* TECHNICALLY terraform plan does not properly display outputs, 
+	+ HOWEVER it does show "Changes to Outputs" IF they are either new, or have changed. 
+	+ Once they exist in the State and aren't chaning, terraform plan won't list them anymore. 
+
+
+* How do we prevent sensitive information from being displayed (plan, apply): 
+Ans: 
+	+ sensitive = true
+	+ For CICD we tipically set it as an env var ($ export TF_VAR_). 
+	+ If we ever need to see the value we can do: $ terraform output <SECRET_VAR> 
+	+ Obviously we also need to secure the State file via access mgmt + enc. 
+
+
+* When we provision/create a resource, attributes are exported. How can we see them?
+Ans: 
+	+ $ terraform show 
+	+ For more info refer to the documentation. 
+* Attributes exported by a resource can be used as an input in another resource block. 
+Notice how the EC2 instance is making use of the public key, supplied by the key pair resource: 
+	resource "aws_key_pair" "ssh-access" {
+		key_name = "ssh-access"
+		public_key = var.key-content
+	}
+	resource "aws_instance" "web-server" {
+		ami = var.web-server-ami
+		instance_type = var.web-shape
+		key_name = aws_key_pair.ssh-access.key_name
+	}
+What is this called? 
+Ans: 
+	+ Reference expression. 
+	+ Syntax: <RESOURCE_TYPE>.<RESOURCE_NAME>.<ATTRIBUTE> 
+* What happens when we run terraform apply? (Tf tries to create all resources in parallel.)
+Ans: 
+	+ The key pair is created first as the EC2 instance depens on it. 
+	+ Implicit dependency. 
+
+* Explicit dependency: depends_on = [] 						// Meta-argument. 
+
+
+* What is this called: 
+	resource "random_string" "server-suffix" {
+		length = 6
+		upper = false
+		special = false
+	}
+	resource "aws_instance" "web-server" {
+		ami = var.web-server-ami
+		instance_type = var.web-shape
+		tags = {
+			Name = "web-${random_string.server-suffix.id}"		# <---- This. 
+		}
+	}
+Ans:
+	+ Interpolation sequence. 
+* Now suppose we want to modify the random string to be 5 characters in length instead, BUT 
+	keep the name tag of the web server as-is. 
+Ans: 
+	+ Use Resource Targeting (after editting random_string resource): $ terraform apply -target random_string.server-suffix 
+	+ Only use it to correct a mistake. 
+
+
+* Suppose we already have an SSH key pair in an AWS account. How can we use it in Tf?
+Ans: 
+	+ data "aws_key_pair" "ssh-access" {
+		key_name = "ssh-access"
+	}
+	resource "aws_instance" "web-server" {
+		ami = var.web-server-ami
+		instance_type = var.web-shape
+		key_name = data.aws_key_pair.ssh-access.key_name
+	}
+* Now get it by looking at the tag "project" with value "cerberus":
+Ans: 
+	+ data "aws_key_pair" "cerberus-ssh-key" {
+		filter {
+			name = "tag:project"
+			values = ["cerberus"]
+		}
+	}
+
+
+* Imagine we have thousands of resources managed by Tf. 
+We only need to make a small update but cannot afford the long time it takes Tf to "refresh" the state. What to do?
+Ans:
+	+ $ terraform apply -refresh=false 
+	+ We must be VERY careful with this flag as it WILL introduce inconsistencies if the resources in the real world have been changed manually! 
+
+
+* Why should we NEVER commit Tf state files to VCS such as GitHub? 
+Ans: 
+	+ Because they contain sensitive information. 
+	+ Instead we should use remote state backends such as S3 or Tf Cloud. 
+
+
+* What to do when you need to inspect the the State file but it is stored in a remote backend? 
+Ans: 
+	+ $ terraform state pull 
+
+* You see a wierd file called ".terraform.lock.hcl" in the team's repo. Why was this commited? Is it a mistake? Should we add it to .gitignore? 
+Ans: 
+	+ The Depency Lock File ensures consistent provider versions accross all environments and Tf operations. 
+	+ Provides consistency by ensuring all team members and deployment pipelines use the exact same versions of providers. 
+	+ Prevents accidental upgrades that could introduce breaking changes. 
+	+ It IS a best practice to commit it to the VCS. 
+
+* Only update state / sync Tf with real-world infra: 
+Ans: 
+	+ $ terraform apply -refresh-only 
+	+ OR $ terraform refresh 
+
+* Rename a resource: 
+	+ $ terraform state mv aws_dynamodb_table.state-locking aws_dynamodb_table.state-locking-db 
+	+ Manually update name of resource in main.tf. 
+	+ Apply. 
+
+
+* Suppose a colleague updated the version of Nginx in an EC2 web server manually. How do we revert that change with Tf? 
+Ans: 
+	+ $ terraform taint aws_instance.web-server 
+	+ $ terraform plan 
+	+ Apply will replace it. 
+
+
+* Something went wrong. Apply output is not enough to figure out what went wrong. What to do? 
+Ans: 
+	+ $ export TF_LOG=
+	+ Log levels: 
+		- INFO. 
+		- WARNING. 
+		- ERROR. 
+		- DEBUG. 
+		- TRACE. 						// Most verbose. 
+	+ $ terraform plan 
+
+* An EC2 instance already exists in an AWS account. You have been tasked to now manage it with Tf. 
+Ans: 
+	+ We need to import it: 
+		1.- Update main.tf by adding an empty resource block along with a useful comment: 
+			resource "aws_instance" "web-server-2-imported" {
+				# Existing resource being imported into Tf. 
+			}
+		2.- Go to AWS Console > EC2 > Copy instance-id. 
+		3.- $ terraform import aws_instance.web-server-2-imported i-026eus6398940 
+		4.- Complete resource block by copying values over from $ terraform state show 
+		5.- $ terraform plan 
+
+
+
+
+
+* Functions: 
+	+ Get the max value from a set variable called numbers:
+	Ans: 
+		- $ terraform console
+		  > max(var.numbers...)				# <- expansion. 
+
+	+ Convert a comma-separated list of AMIs string variable into a real list: 
+		- $ terraform console
+		  > split(",", var.amis)
+
+	+ Find index of value in list: 
+		- $ terraform console
+		  > index(var.amis, "AMI-873hs9898d98")
+
+	+ Get element at index:
+		- $ terraform console
+		  > element(var.amis, 2)
+
+
+* Conditional Expressions:
+	+ Provide the user a password, at least 8 characters long:
+	Ans: 
+		resource "random_password" "password-generator" {
+			length = var.len < 8 ? 8 : var.len
+		}
+		output "password" {
+			value = random_password.password-generator.result
+		}
+		variable len {}
+		$ terraform apply -var len=5 
+
+
+
+* Local Values: 
+	+ We have 2 different instances for the same dept & project. 
+	Improve the configuration by removing duplicated code: 
+	resource "aws_instance" "web-server" {
+		ami = var.web-server-ami
+		instance_type = var.web-shape
+		tags = {
+			Department = "finance"
+			Project = "KodeKloud"
+		}
+	}
+	resource "aws_instance" "db-server" {
+		ami = var.db-server-ami
+		instance_type = var.db-shape
+		tags = {
+			Department = "finance"
+			Project = "KodeKloud"
+		}
+	}
+		- Solution: 
+		locals { 
+			common_tags = {
+				Department = "finance"
+				Project = "KodeKloud"
+			}
+		}
+		# Use: 
+			tags = local.common_tags
+
+	+ Now we want to create a bucket with a globally unique name: 
+	resource "aws_s3_bucket" "finance-bucket" {
+		bucket = local.bucket-name
+	}
+	resource "random_string" "random-suffix" {
+		length = 6
+		special = false
+		upper = false
+	}
+	variable "project" {
+		default = "KodeKloud"
+	}
+	locals {
+		bucket-name = "${var.project}-${random_string.random-suffix.id}-bucket"
+	}
+
+
+
+
+* Dynamic Blocks & Splat Expressions: 
+	+ How can we improve this code? 
+	resource "aws_vpc" "backend-vpc" {
+		cidr_block = "10.0.0.0/16"
+		tags = {
+			Name = "backend-vpc"
+		}
+	}
+	resource "aws_subnet" "private-subnet" {
+		vpc_id = aws_vpc.backend-vpc.id
+		cidr_block = "10.0.2.0/24"
+		tags = {
+			Name = "private-subnet"
+		}
+	}
+	resource "aws_security_group" "backend-sg" {
+		name = "backend-sg"
+		vpc_id = aws_vpc.backend-vpc.id
+		ingress {
+			from_port = 22
+			to_port = 22
+			protocol = "tcp"
+			cidr_blocks = ["0.0.0.0/0"]
+		}
+		ingress {
+			from_port = 8080
+			to_port = 8080
+			protocol = "tcp"
+			cidr_blocks = ["0.0.0.0/0"]
+		}
+		# Suppose in the future we need to add even more ingress rules! 
+	}
+		- Solution: 
+			variable "ingress_ports" {
+				default = [22, 8080]
+			}
+			resource "aws_security_group" "backend-sg" {
+				name = "backend-sg"
+				vpc_id = aws_vpc.backend-vpc.id
+				dynamic "ingress" {
+					iterator = port
+					for_each = var.ingress_ports
+					content {
+						from_port = port.value
+						to_port = port.value
+						protocol = "tcp"
+						cidr_blocks = ["0.0.0.0/0"]
+					}
+				}
+			}
+			output "to_ports" {
+				value = aws_security_group.backend-sg.ingress[*].to_port
+			}
+
+
+
+* What is a module? 
+Ans:
+	+ Any directory containing Tf configuration files. 
+
+* What is the Root Module? 
+Ans: 
+	+ Where we can run Tf commands. 
+	+ Every Tf config has a Root Module. 
+
+* What is the real significance/importance of modules? 
+Ans: 
+	+ Modules can call other modules, which allows for resource configurations to be packaged and reused. 
+
+* Suppose we have aws-instance Tf module and we want to use it as a child module, from another one at the 
+	same location that will now be the Root Module: 
+Ans: 
+	+ Create development folder at the same location as "aws-instance" folder. 
+	+ main.tf:
+		module "dev-instance" {
+			source = "../aws-instance"
+		}
+	+ The only required argument is "source". The path can be absolute or relative. 
+
+* Use official AWS Security Group module & SSH submodule from the Registry:
+	module "ssh-access-sg" {
+		source = "terraform-aws-modules/security-group/aws/modules/ssh"
+		version = "3.16.0"
+		vpc_id = data.vpc-id
+		ingress_cidr_blocks = ["10.0.0.0/16"]
+		name = "ssh-access"
+	}
+
+
+
+
+
+
+_ Exam Q&A _
+
+* The for_each meta-argument accepts: 
+	+ set(string). 
+	+ map. 
+
+* Optional arguments supported in an output block:
+	+ description. 
+	+ sensitive. 
+	+ ephemeral. 
+	+ depends_on. 
+	+ precondition. 
+
+* In-place updates: 
+	+ Undelying infra remains the same. 
+	+ SW & config of OS changes. 
+
+* Does not support dynamic block:
+	+ locals. 
+
+* What happens if I only do `$ terraform import` and then run `$ terraform apply`? 
+	+ Tf throws an error. 
+	+ Because we haven't updated the resource with correct arguments yet. 
+
+* Which argument of the lifecycle meta-argument supports a list as a value ?
+	+ ignore_changes. 
+
+* Reference this value:
+	locals {
+		common_tags = ...
+	}
+Ans:
+	+ local.common_tags
+
+* local-only data sources:
+	+ Re-calculated each time a new plan is created. 
+	+ The same as all other data sources BUT result only exists temporarily. 
+
+* Execute Tf on a module without "cd"ing into that dir:
+	+ Use -chdir option. 
+
+* Logging can be enabled separately for Tf itself with: TF_LOG_CORE. 
+* Logging can be enabled separately for provider plugins with: TF_LOG_PROVIDER. 
+
+* Can we use dynamic blocks to generate meta-argument blocks such as lifecycle and provisioner blocks?
+Ans:
+	+ No. 
+	+ A dynamic block can only generate arguments that belong to the resource type, data source, provider, or provisioner being configured. It is not possible to generate meta-argument blocks such as lifecycle and provisioner blocks, since Terraform must process these before it is safe to evaluate expressions. 
+
+* These Tf commands will auto refresh state: 
+	+ plan. 
+	+ apply. 

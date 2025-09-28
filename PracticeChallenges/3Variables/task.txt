@@ -1,0 +1,30 @@
+* Tasks:
+	+ Basic variables:
+		- Declare a variable for the number of servers we want, default: 2.
+		- Declare a variable for whether we want detailed monitoring or not, default: no, as it costs.
+	+ Variable validation:
+		- Declare an input variable called "ami".
+		- Add validation:
+			' Make sure it starts with "ami-".
+		// Note: validating that length of server names matches num_servers is not trivial, as cross-variable validation is not allowed in variable blocks. 
+	+ Advanced variable types:
+		- Define server names: "web1" through "web#" (as many as "number of servers"). No repeats. 
+		// Note: reading the server names from a text file is not trivial, as variable defaults cannot use functions. 
+		- Define instance types that depend on whether server will be in "dev" (t3.micro) or "prod" (m5.large) env. 
+		// Note: variables are not allowed as values in map default values declaration. 
+	+ Finally declare EC2 instances as virtual web servers that use those variables:
+		- Number of servers. 
+		- AMI (input var). 
+		- Instance type. 
+		- Name as tag. 
+	+ Destroy the EC2 instances if configuration applied. 
+	+ Complex variable types: 
+		- Now imagine a pet. Define it with some properties and give it default values. 
+		- Now simplify the creation of sets of servers like so:
+			} -var='servers_template=[1, false, "app"]' 
+			} -var='servers_template=[2, true, "RDS-"]' -var env=prod -var is_db=true 
+
+* Specifications:
+	+ Terraform version: 1.1.7.
+	+ AWS version: 6.12.0+.
+	+ Provide value for AMI by first getting it by using Get-Ohio-Ubuntu-AMI module. 

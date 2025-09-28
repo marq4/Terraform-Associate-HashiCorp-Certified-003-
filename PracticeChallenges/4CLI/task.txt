@@ -1,0 +1,19 @@
+* Tasks:
+	+ Define 2 environments: 
+		- DEV. 
+		- PROD. 
+	+ Prepare infra to be deployed for each: 
+		- Same region. 
+		- Same AMI. 
+		- Shapes: 
+			- DEV: t3.micro. 
+			- PROD: m5.large. 
+		- Tags:
+			- Environment: 
+				' DEV: "Development". 
+				' PROD: "Production". 
+
+* Specifications:
+	+ Terraform version: 1.13.1.
+	+ AWS version: 6.12.0+.
+	+ Provide value for AMI by first getting it by using Get-Ohio-Ubuntu-AMI module. 

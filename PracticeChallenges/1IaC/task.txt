@@ -1,0 +1,6 @@
+* Task:
+	+ Manage a local text file with Terraform with some content.
+	+ Format, validate, and lint.
+* Specifications:
+	+ Terraform version: 1.1.7.
+	+ Provider: 2.5.3. 

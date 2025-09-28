@@ -1,0 +1,12 @@
+* Problem:
+With the current configuration, if we need to remove web1 from the list, 
+	web1 server is renamed to web2, web2 -> web3, web3 is to be destroyed. 
+
+* Task: 
+Given {main.tf, variables.tf, terraform.tf}, update the configuration so that if we need to remove "web1" server, 
+	only that resource is destroyed, and the remaining 2 remain unchanged. 
+
+* Specifications:
+	+ Terraform version: 1.13.1.
+	+ AWS version: 6.12.0+.
+	+ Provide value for AMI by first getting it by using Get-Ohio-Ubuntu-AMI module. 

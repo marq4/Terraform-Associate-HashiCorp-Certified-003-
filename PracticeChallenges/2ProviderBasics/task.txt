@@ -1,0 +1,9 @@
+* Task:
+	+ Create 2 SSH keys for 2 different AWS regions:
+		- Ohio: us-east-2.
+		- Oregon: us-west-2. 
+
+* Specifications:
+	+ Use variables for the key contents, set them to randomly-typed strings, do not actually apply.
+	+ Terraform version: 1.1.7.
+	+ Provider version: 6.12.0+.

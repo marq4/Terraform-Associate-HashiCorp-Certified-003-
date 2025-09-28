@@ -1,0 +1,21 @@
+* Solution:
+	1.- $ terraform workspace list
+		+ Shows we are in "default" workspace.
+	2.- Create new workspaces for each environment:
+		+ $ terraform workspace new prod
+		+ $ terraform workspace new dev
+	3.- $ terraform workspace list
+		+ Shows we are in "dev" workspace:
+			* dev
+	4.- Define the instance types for each environment as a map variable. 
+	5.- Define the EC2 instance shape to choose the corresponding value
+		per env / workspace using lookup function.
+	6.- Test by doing:
+		+ $ terraform console
+		   > terraform.workspace
+		   > lookup(var.dynamic_instance_type_per_env, terraform.workspace)
+		   > exit
+		+ $ terraform workspace select prod
+	7.- Define env tag to corresponding workspace.
+	8.- Test by doing:
+		+ $ terraform plan
